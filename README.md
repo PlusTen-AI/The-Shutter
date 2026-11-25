@@ -6,9 +6,8 @@ takes a share of the work.
 
 ## Why shutter
 
-- **Built for long videos.** Nothing long is generated in one piece: shutter splits a film into cuts and a long clip
-  into segments, the nodes generate them in parallel, and shutter joins them into one continuous video (one encode,
-  sound carried across cuts, episode breaks optional).
+- **Built for long videos.** A film is made shot by shot and then joined into one continuous video (one encode, sound
+  carried across shots, episode breaks optional). See *How two nodes share the work* below.
   - A ~3-minute drama from a script (characters already registered) — 70 first frames, 80 video cuts, 40 voiced
     lines — in **99 minutes on two nodes**, no failures (measured).
   - Person swap on a 29 s dance video: 7 segments with outfit and shoes held the whole way, face fix and 1080p upscale
@@ -24,10 +23,9 @@ takes a share of the work.
   | LTX-2.5 with IC-LoRA | **128 s** | 217 s |
   | SeedVR2 7B upscale, 5 s → 1080p | **270 s** | ≈447 s |
 
-- **One node runs everything; more nodes go faster.** Each unit of work runs on a single GPU — no tensor parallelism,
-  no special interconnect. With more nodes, cuts, candidates, swap segments and upscale chunks are spread over them:
-  six pi-H3 cuts (4 steps + face fix) in 11 minutes on two nodes; a 59.6 s film upscaled in 29 minutes on two nodes
-  (≈52 on one, estimate). ComfyUI runs on one machine at a time.
+- **One node runs everything; more nodes go faster.** Each shot is made by one GPU, so a single GB10 can do every job.
+  Add a second node and shutter hands out the work by itself — nothing to configure per job. ComfyUI runs on one
+  machine at a time.
 - **Characters stay the same person.** Main image → 8-panel reference sheet (4 faces, 4 full body) → expressions, every
   image face-checked; video cuts get a face pass (hyperswap with an occlusion mask) so faces don't drift between cuts.
   A wardrobe keeps the same person in other outfits.
@@ -40,6 +38,24 @@ takes a share of the work.
   folder can be shared with ComfyUI — no copies.
 - **Simple to run.** One Docker image; a browser UI in English or Korean (Python standard library only) that saves
   results on your own machine. The queue lives on the node, so jobs keep running while your laptop sleeps.
+
+## How two nodes share the work
+
+Think of each node as one camera crew. shutter keeps a to-do list on the main node; whenever a node is free it takes the
+next item.
+
+- **A film is made of shots, so the shots are shared.** A 20-second video made of two 10-second shots: with one node
+  the shots are made one after the other (about 11 minutes with pi-H3, 4 steps); with two nodes both are made at the
+  same time (about 5.5 minutes), then joined. More shots, same idea — two nodes take about half the time
+  (estimate from the measured 328 s per 10 s shot).
+- **One continuous shot stays on one node.** A single unbroken shot is made whole by one node — splitting it would
+  break the motion. Meanwhile the other node works on the next shot.
+- **A long source video is cut into pieces.** For person swap and upscaling, the input video already exists, so it is
+  cut into ~5-second pieces that the nodes work on side by side. The joins don't show: for a swap the frames where
+  pieces meet are made first and shared by both pieces; for upscaling the pieces overlap and are blended.
+
+Measured on two nodes: six pi-H3 shots (4 steps + face fix) in 11 minutes; a 59.6 s film upscaled in 29 minutes (≈52 on
+one node, estimate).
 
 ![Character: main image → 8-panel sheet → expressions](screenshots/character.png)
 
