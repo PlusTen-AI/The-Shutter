@@ -1,27 +1,65 @@
 # shutter
 
-An image and video production server for NVIDIA GB10 nodes (DGX Spark class), with its own CUDA engine. Jobs are
-characters (Qwen-Image 2.1 masters, 8-panel sheets, face check), scenes, reference-to-video and person swap
-(MiniMax H3: Singularity v1.3 + turbo LoRA), drama shots (LTX-2.5 image-to-video with a face pass, pi-H3 2/4-step) and
-upscaling (SeedVR2 7B). With the same models it gives the same results as ComfyUI, faster.
+**Long-form AI video production on NVIDIA GB10 (DGX Spark class) — from characters to a finished, continuous film.**
+Its own CUDA engine gives the same output as ComfyUI with the same models, faster. One node is enough; every extra node
+takes a share of the work.
 
-- One Docker image. The main node runs the job queue server and a worker; every other node runs a worker. Long videos
-  are split into segments that the nodes generate in parallel.
-- Weights live in one shared folder in ComfyUI's folder layout (`diffusion_models/`, `text_encoders/`, `vae/`,
-  `loras/` …), mounted read-only. LoRAs and the pi-H3 adapter are merged at load exactly as ComfyUI computes them, so the
-  folder holds only the original files and a ComfyUI install can use the same folder.
-- A small web UI (`mac/mac.py`, Python standard library only) submits jobs, shows the queue and saves results to a
-  local folder.
+## Why shutter
+
+- **Built for long videos.** Nothing long is generated in one piece: shutter splits a film into cuts and a long clip
+  into segments, the nodes generate them in parallel, and shutter joins them into one continuous video (one encode,
+  sound carried across cuts, episode breaks optional).
+  - A ~3-minute drama from a script (characters already registered) — 70 first frames, 80 video cuts, 40 voiced
+    lines — in **99 minutes on two nodes**, no failures (measured).
+  - Person swap on a 29 s dance video: 7 segments with outfit and shoes held the whole way, face fix and 1080p upscale
+    included, 91 minutes on two nodes (measured).
+- **Faster than ComfyUI, same output.** Same GB10, same models and settings; outputs checked against ComfyUI on fixed
+  tests (same videos; SeedVR2 end to end 54.8 dB PSNR).
+
+  | job | shutter | ComfyUI |
+  |---|---|---|
+  | pi-H3 cut, 7.3 s, 2 steps | **110 s** | 148–154 s |
+  | pi-H3 text-to-video, 10 s, 4 steps | **328 s** | 404 s |
+  | LTX-2.5 cut, 5 s, 1088×1920 | **134 s** | 201 s |
+  | LTX-2.5 with IC-LoRA | **128 s** | 217 s |
+  | SeedVR2 7B upscale, 5 s → 1080p | **270 s** | ≈447 s |
+
+- **One node runs everything; more nodes go faster.** Each unit of work runs on a single GPU — no tensor parallelism,
+  no special interconnect. With more nodes, cuts, candidates, swap segments and upscale chunks are spread over them:
+  six pi-H3 cuts (4 steps + face fix) in 11 minutes on two nodes; a 59.6 s film upscaled in 29 minutes on two nodes
+  (≈52 on one, estimate). ComfyUI runs on one machine at a time.
+- **Characters stay the same person.** Main image → 8-panel reference sheet (4 faces, 4 full body) → expressions, every
+  image face-checked; video cuts get a face pass (hyperswap with an occlusion mask) so faces don't drift between cuts.
+  A wardrobe keeps the same person in other outfits.
+- **Script to film.** A plain-text script (scenes, cuts, first frames, dialogue, screen text) drives the whole chain:
+  first frames → video cuts → voices → scene export → one film. Screen text (name cards, counters, live comments,
+  subtitles) stays sharp after upscaling, and every character keeps one voice (voice conversion that keeps the length,
+  so lips stay in sync).
+- **Fetch only what you use.** Models come in groups: images and characters need 25 GB; add video, upscale or voice
+  when you need them. Every file is pinned to the exact version shutter was tested with and sha256-checked, and the
+  folder can be shared with ComfyUI — no copies.
+- **Simple to run.** One Docker image; a browser UI in English or Korean (Python standard library only) that saves
+  results on your own machine. The queue lives on the node, so jobs keep running while your laptop sleeps.
 
 ![Character: main image → 8-panel sheet → expressions](screenshots/character.png)
 
 ![Video: one cut with LTX-2.5, pi-H3 or H3, face fix and upscale](screenshots/video.png)
 
+## How it works
+
+- One Docker image. The main node runs the job queue server and a worker; every other node runs a worker.
+- Models: Qwen-Image 2.1 (images, characters, scenes), MiniMax H3 (reference-to-video and person swap with
+  Singularity v1.3 + turbo LoRA; pi-H3 2/4-step for drama shots), LTX-2.5 (image-to-video), SeedVR2 7B (upscale),
+  Qwen3-TTS + Seed-VC (voices).
+- Weights live in one folder in ComfyUI's layout (`diffusion_models/`, `text_encoders/`, `vae/`, `loras/` …),
+  mounted read-only. LoRAs and the pi-H3 adapter are merged at load exactly as ComfyUI computes them, so the folder
+  holds only the original files.
+
 ## Requirements
 
 - NVIDIA GB10 (sm_121) nodes with Docker and GPU access (`docker run --gpus all`), the base image
   `nvcr.io/nvidia/pytorch:26.07-py3`
-- Disk for the weights: about 149 GB for everything, less if you fetch only the groups you use (see Weights below)
+- Disk for the weights: 25 GB for images and characters, up to 149 GB for everything (see Weights below)
 
 ## Setup
 
@@ -36,7 +74,18 @@ cp mac/settings.example.json mac/settings.json   # server = http://<main node>:8
 Each node needs the weights in one models folder (ComfyUI's folder layout; a ComfyUI install can share it).
 `fetch_models.py` downloads them from their original Hugging Face repositories, pinned to the exact files shutter was
 tested with (`docker/weights.lock.json`: repo commit, size, sha256). Every download is checked; files already in the
-folder are kept.
+folder are kept. **You don't need everything** — fetch the groups for what you make:
+
+| you make | groups | download |
+|---|---|---|
+| images, characters, places, scenes | `image` | 25 GB |
+| + drama cuts with pi-H3 / reference video with H3 | `image h3` | 93 GB |
+| + drama cuts with LTX-2.5 | `image ltx` | 65 GB |
+| + upscale to 1080p | add `upscale` | +8.8 GB |
+| + character voices | add `voice` | +6.9 GB |
+| everything | (no group) | 149 GB |
+
+Groups in detail (`base` comes with every group):
 
 | group | size | needed for |
 |---|---|---|
