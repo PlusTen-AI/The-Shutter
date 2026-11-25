@@ -5,9 +5,15 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ./deploy.sh down
 PORT=${SHUTTER_MAC_PORT:-8310}
-P=$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null || true)
-if [ -n "$P" ]; then
-  kill $P
-  for _ in 1 2 3 4 5 6 7 8 9 10; do lsof -nP -iTCP:$PORT -sTCP:LISTEN -t >/dev/null 2>&1 || break; sleep 0.5; done
+ui(){ { ps -p "$1" -o command= 2>/dev/null || tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null; } | grep -q 'mac/mac.py'; }
+P=$(cat mac/mac.pid 2>/dev/null || true)
+[ -n "$P" ] && ! ui "$P" && P=   # stale pid file
+if [ -z "$P" ] && command -v lsof >/dev/null; then   # a UI started before mac.pid existed
+  P=$(lsof -nP -iTCP:$PORT -sTCP:LISTEN -t 2>/dev/null || true)
 fi
+if [ -n "$P" ]; then
+  kill $P 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 $P 2>/dev/null || break; sleep 0.5; done
+fi
+rm -f mac/mac.pid
 echo "stopped (nodes, UI)"

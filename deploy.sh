@@ -50,7 +50,8 @@ build)
   TAG=${2:-}
   for n in $NODES; do
     if [ -z "$TAG" ]; then
-      COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf - --exclude __pycache__ docker engine server worker |
+      X=(); tar --version 2>/dev/null | grep -q bsdtar && X=(--no-xattrs --no-mac-metadata)   # macOS: no ._ files
+      COPYFILE_DISABLE=1 tar ${X[@]+"${X[@]}"} -czf - --exclude __pycache__ docker engine server worker |
         $SSH "$(host $n)" "docker build -q --label project=shutter -t shutter:dev -f docker/Dockerfile -" >/dev/null
       echo "built shutter:dev → $n"
     else

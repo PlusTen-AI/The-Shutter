@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""shutter-mac: Mac browser UI server + result sync. Standard library only (macOS stock python3 3.9).
+"""shutter-mac: browser UI server + result sync on the machine you work from. macOS: standard library only (stock
+python3 3.9). Linux / WSL: python3 + curl, and Pillow + PyAV in .venv for crops and thumbnails (start.sh uses it).
 
   python3 mac/mac.py   → http://localhost:8310
 The UI forwards the job API as /api/srv/... to the server (C) unchanged. The Hermes skill can call the server API directly.
@@ -49,17 +50,23 @@ class Unreachable(Exception):
     pass
 
 
+CURL = shutil.which('curl') or '/usr/bin/curl'
+
+
 def srv(method, path, body=None, upload=None, out=None, timeout=30):
     """Server call → (HTTP code, body). python lacks the macOS 'Local Network' permission, so LAN connections go through
-    /usr/bin/curl.  upload: send this file as the body.  out: receive the body into this file."""
-    cmd = ['/usr/bin/curl', '-sS', '-m', str(timeout), '-X', method, '-w', '\n%{http_code}', '-o', out or '-']
+    curl (macOS, Linux and WSL ship it).  upload: send this file as the body.  out: receive the body into this file."""
+    cmd = [CURL, '-sS', '-m', str(timeout), '-X', method, '-w', '\n%{http_code}', '-o', out or '-']
     if method == 'HEAD':
         cmd[cmd.index('-X'):cmd.index('-X') + 2] = ['-I']
     if upload:
         cmd += ['-T', upload]
     elif body is not None:
         cmd += ['-H', 'Content-Type: application/json', '--data-binary', '@-']
-    r = subprocess.run(cmd + [settings()['server'] + path], input=body, capture_output=True)
+    try:
+        r = subprocess.run(cmd + [settings()['server'] + path], input=body, capture_output=True)
+    except FileNotFoundError:
+        raise Unreachable('curl 없음 — curl 을 설치해야 서버에 연결됨')
     text, _, code = r.stdout.rpartition(b'\n')
     if r.returncode or code == b'000':
         raise Unreachable(r.stderr.decode(errors='replace').strip() or 'curl exit %d' % r.returncode)
@@ -72,6 +79,86 @@ def sha_file(path):
         for b in iter(lambda: f.read(CHUNK), b''):
             h.update(b)
     return h.hexdigest()
+
+
+# ---- pictures on the machine the UI runs on (crops, thumbnails of unsaved candidates): Pillow / PyAV when installed
+# (Linux, WSL: pip install pillow av into .venv — start.sh runs it), else the macOS tools sips / qlmanage. With neither,
+# a crop fails with a message and a candidate stays whole instead of becoming a thumbnail ----
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+try:
+    import av
+except ImportError:
+    av = None
+SIPS, QLMANAGE = shutil.which('sips'), shutil.which('qlmanage')
+
+
+def img_crop(src, box, dst):
+    """box = [x0, y0, x1, y1] as fractions of the picture → png dst (at least 16 px a side)."""
+    if Image:
+        with Image.open(src) as im:
+            w, h = im.size
+            x, y = round(box[0] * w), round(box[1] * h)
+            im.crop((x, y, min(w, x + max(16, round((box[2] - box[0]) * w))), min(h, y + max(16, round((box[3] - box[1]) * h))))).save(dst, 'PNG')
+        return
+    if not SIPS:
+        raise Bad('그림 자르기에 Pillow 필요 (.venv 에 pip install pillow av)')
+    w, h = sips_size(src)
+    x, y = round(box[0] * w), round(box[1] * h)
+    cw, ch = min(max(16, round((box[2] - box[0]) * w)), w - x), min(max(16, round((box[3] - box[1]) * h)), h - y)
+    # sips crops wrongly at the edges (400x200 grid): offset "0 0" takes the centre, and at x 0 a box reaching the
+    # bottom comes back uncropped. A 2 px border first (padding is centred) keeps every offset off 0 and off the edges.
+    pad = dst + '.pad.png'
+    subprocess.run([SIPS, '-s', 'format', 'png', '-p', str(h + 4), str(w + 4), src, '--out', pad], capture_output=True)
+    r = subprocess.run([SIPS, '-s', 'format', 'png', '-c', str(ch), str(cw), '--cropOffset', str(y + 2), str(x + 2), pad,
+                        '--out', dst], capture_output=True)
+    if os.path.isfile(pad):
+        os.remove(pad)
+    if r.returncode or not os.path.isfile(dst) or sips_size(dst) != (cw, ch):
+        if os.path.isfile(dst):
+            os.remove(dst)
+        raise Bad('자르기 실패 (sips) — .venv 에 pip install pillow av 권장: %s' % r.stderr.decode(errors='replace')[:200])
+
+
+def sips_size(path):
+    out = subprocess.run([SIPS, '-g', 'pixelWidth', '-g', 'pixelHeight', path], capture_output=True, text=True).stdout
+    return tuple(int(re.search(r'%s: (\d+)' % k, out).group(1)) for k in ('pixelWidth', 'pixelHeight'))
+
+
+def img_thumb(src, dst, size=256):
+    """A small jpg of a picture → True when it was made."""
+    if Image:
+        with Image.open(src) as im:
+            im = im.convert('RGB')
+            im.thumbnail((size, size))
+            im.save(dst, 'JPEG', quality=85)
+    elif SIPS:
+        subprocess.run([SIPS, '-Z', str(size), '-s', 'format', 'jpeg', src, '--out', dst], capture_output=True)
+    return os.path.isfile(dst)
+
+
+def video_thumb(src, dst, size=256):
+    """A small jpg of a video (its middle frame; Quick Look's frame on macOS without PyAV) → True when it was made."""
+    if av and Image:
+        try:
+            with av.open(src) as c:
+                if c.duration:
+                    c.seek(c.duration // 2)
+                im = next(c.decode(video=0)).to_image()
+            im.thumbnail((size, size))
+            im.save(dst, 'JPEG', quality=85)
+        except (av.error.FFmpegError, StopIteration, OSError):
+            pass
+    elif QLMANAGE and SIPS:
+        d = os.path.dirname(dst)
+        subprocess.run([QLMANAGE, '-t', '-s', str(size), '-o', d, src], capture_output=True)
+        png = os.path.join(d, os.path.basename(src) + '.png')
+        if os.path.isfile(png):
+            subprocess.run([SIPS, '-s', 'format', 'jpeg', png, '--out', dst], capture_output=True)
+            os.remove(png)
+    return os.path.isfile(dst)
 
 
 def send_to_node(path):
@@ -407,10 +494,10 @@ def sessions(s, cat='characters'):
 
 
 def thumb_and_drop(path):
-    """Keep a small jpg of an unsaved candidate (the job record) and delete the full image (boss, session #10)."""
-    small = os.path.join(os.path.dirname(path), '_thumb_' + os.path.basename(path)[:-4] + '.jpg')
-    subprocess.run(['/usr/bin/sips', '-Z', '256', '-s', 'format', 'jpeg', path, '--out', small], capture_output=True)
-    os.remove(path)
+    """Keep a small jpg of an unsaved candidate (the job record) and delete the full image (boss, session #10). Without
+    a way to make the thumbnail the image stays whole."""
+    if img_thumb(path, os.path.join(os.path.dirname(path), '_thumb_' + os.path.basename(path)[:-4] + '.jpg')):
+        os.remove(path)
 
 
 def finish_character(s, b, register):
@@ -784,17 +871,11 @@ def crop_image(s, b):
     """A part of a storage image (box = [x0, y0, x1, y1] as fractions) → a new png in <storage>/assets → its path. The
     scene workflow cuts shots out of the seated wide plate this way (scene.zoom)."""
     src = storage_file(s, b.get('rel'))
-    x0, y0, x1, y1 = (min(1.0, max(0.0, float(v))) for v in b.get('box') or [])
-    out = subprocess.run(['/usr/bin/sips', '-g', 'pixelWidth', '-g', 'pixelHeight', src], capture_output=True, text=True).stdout
-    w, h = (int(re.search(r'%s: (\d+)' % k, out).group(1)) for k in ('pixelWidth', 'pixelHeight'))
-    cw, ch = max(16, round((x1 - x0) * w)), max(16, round((y1 - y0) * h))
+    box = [min(1.0, max(0.0, float(v))) for v in b.get('box') or []]
     d = os.path.join(s['storage'], 'assets')
     os.makedirs(d, exist_ok=True)
     tmp = os.path.join(d, '.crop-%d.png' % threading.get_ident())
-    r = subprocess.run(['/usr/bin/sips', '-s', 'format', 'png', '-c', str(ch), str(cw), '--cropOffset', str(round(y0 * h)),
-                        str(round(x0 * w)), src, '--out', tmp], capture_output=True)
-    if r.returncode or not os.path.isfile(tmp):
-        raise Bad('자르기 실패: %s' % r.stderr.decode(errors='replace')[:200])
+    img_crop(src, box, tmp)
     sha = sha_file(tmp)
     os.replace(tmp, os.path.join(d, sha + '.png'))
     return 'assets/%s.png' % sha
@@ -1142,14 +1223,11 @@ def save_doc(s, b):
 
 
 def thumb_video(path):
-    """Keep a small jpg (Quick Look frame) of an unsaved video candidate and delete the video (design §11 후보)."""
+    """Keep a small jpg of an unsaved video candidate and delete the video (design §11 후보). Without a way to make the
+    thumbnail the video stays."""
     d, n = os.path.split(path)
-    subprocess.run(['/usr/bin/qlmanage', '-t', '-s', '256', '-o', d, path], capture_output=True)
-    if os.path.isfile(path + '.png'):
-        subprocess.run(['/usr/bin/sips', '-s', 'format', 'jpeg', path + '.png', '--out', os.path.join(d, '_thumb_' + n[:-4] + '.jpg')],
-                       capture_output=True)
-        os.remove(path + '.png')
-    os.remove(path)
+    if video_thumb(path, os.path.join(d, '_thumb_' + n[:-4] + '.jpg')):
+        os.remove(path)
 
 
 def finish(s, b):

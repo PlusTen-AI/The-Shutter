@@ -36,8 +36,8 @@ takes a share of the work.
 - **Fetch only what you use.** Models come in groups: images and characters need 25 GB; add video, upscale or voice
   when you need them. Every file is pinned to the exact version shutter was tested with and sha256-checked, and the
   folder can be shared with ComfyUI — no copies.
-- **Simple to run.** One Docker image; a browser UI in English or Korean (Python standard library only) that saves
-  results on your own machine. The queue lives on the node, so jobs keep running while your laptop sleeps.
+- **Simple to run.** One Docker image; a browser UI in English or Korean, run from your own computer (macOS, Linux or
+  Windows with WSL) and saving your work there. The queue lives on the node, so jobs keep running while your laptop sleeps.
 
 ## How two nodes share the work
 
@@ -73,17 +73,36 @@ one node, estimate).
 
 ## Requirements
 
-- NVIDIA GB10 (sm_121) nodes with Docker and GPU access (`docker run --gpus all`), the base image
-  `nvcr.io/nvidia/pytorch:26.07-py3`
-- Disk for the weights: 25 GB for images and characters, up to 149 GB for everything (see Weights below)
+- **GPU nodes**: one or more NVIDIA GB10 (sm_121) machines with Docker and GPU access (`docker run --gpus all`), reachable
+  by SSH. Disk for the weights: 25 GB for images and characters, up to 149 GB for everything (see Weights below).
+- **Your computer** (where you work in the browser and where your work is kept): macOS, Linux or Windows with WSL, with
+  Python 3.9+, curl and a browser. macOS needs nothing else. On Linux / WSL add Pillow and PyAV inside the project
+  folder (for crops and thumbnails): `python3 -m venv .venv && .venv/bin/pip install pillow av`.
+
+Your images, videos and originals stay in a folder you choose on your computer. The nodes only hold working copies:
+a result is removed from the node once your computer has it, and inputs are cached for 3 days (Settings › Keep (days);
+0 removes them at the next clean-up once no job needs them).
 
 ## Setup
 
-```bash
-cp shutter.conf.example shutter.conf          # nodes, how to reach them, data and models folders, image TAG
-cp mac/settings.example.json mac/settings.json   # server = http://<main node>:8300, storage = where results go
-./deploy.sh build 1.1                         # every node builds shutter:1.1 from this repository (REPO in shutter.conf)
-```
+Everything is run from your computer. The nodes need no copy of this repository — step 3 makes each of them build the
+image from GitHub by itself.
+
+1. **Your computer — get the code.**
+   ```bash
+   git clone <this repository's URL> shutter && cd shutter
+   python3 -m venv .venv && .venv/bin/pip install pillow av     # Linux / WSL only
+   ```
+2. **Your computer — settings.**
+   ```bash
+   cp shutter.conf.example shutter.conf             # your nodes (one is fine), SSH access, folders, REPO = this repository
+   cp mac/settings.example.json mac/settings.json   # server = http://<main node>:8300, storage = the folder for your work
+   ```
+3. **Your computer — build on the nodes.** `./deploy.sh build 1.1`: every node fetches tag 1.1 from GitHub and builds
+   the image `shutter:1.1` (the first build compiles the engine and takes a while).
+4. **Each node — fetch the weights**, only the groups you need (next section).
+5. **Your computer — start.** `./start.sh` starts the node containers and the UI; open http://127.0.0.1:8310.
+   `./stop.sh` stops the nodes first (a running unit goes back to the queue), then the UI.
 
 ### Weights
 
@@ -127,13 +146,6 @@ $F                   # everything
   (a few minutes for all of it).
 - A file that is already there with another size (another version under the same name, e.g. from ComfyUI) is reported
   and left alone; move it aside and run again to fetch the tested one.
-
-Then, on the machine you work from:
-
-```bash
-./start.sh      # node containers (main node: server + worker, others: worker) and the UI, http://127.0.0.1:8310
-./stop.sh       # nodes first (a running unit goes back to the queue), then the UI
-```
 
 `./deploy.sh logs` shows the container logs; `./deploy.sh up | down` restarts or stops only the nodes.
 
