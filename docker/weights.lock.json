@@ -1,0 +1,227 @@
+{
+ "annotators/hr16/DWPose-TorchScript-BatchSize5/dw-ll_ucoco_384_bs5.torchscript.pt": {
+  "revision": "359d662a9b33b73f6d0f21732baf8845f17bb4be",
+  "size": 135059124,
+  "sha256": "d86a0b2b59fddc0901a7076e9f59c9f8602602133ed72511c693fd11eea23d91"
+ },
+ "diffusion_models/Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors": {
+  "revision": "1259cf16cd0b655ba691a32fb46a409142762972",
+  "size": 20967647456,
+  "sha256": "412a7b126595a958964193f3b42513d7cf2df4196ef04223a0f05e3622949cce"
+ },
+ "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors": {
+  "revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+  "size": 21504034224,
+  "sha256": "c4279eeff115cbeaca494bd2183e7d768c38fe85a184dc6afbb7159157c44334"
+ },
+ "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors": {
+  "revision": "4b53a35191437de05370da548e59aeabe2a5a09a",
+  "size": 20970379616,
+  "sha256": "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a"
+ },
+ "diffusion_models/qwen_image_2.1_int8_convrot.safetensors": {
+  "revision": "aacf31a6d48e707f352ecba714cee0680da3479b",
+  "size": 7256783064,
+  "sha256": "cb74113cb03faecd79611b01fd7fd642f0aa60d6f0b95086abee214d75eaa57d"
+ },
+ "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors": {
+  "revision": "aacf31a6d48e707f352ecba714cee0680da3479b",
+  "size": 7256787829,
+  "sha256": "8144a0182964aa8403ad6dbc011db837304167d235161b9aabaa8532e967314c"
+ },
+ "diffusion_models/seedvr2_7b_int8_convrot.safetensors": {
+  "revision": "df48879708206a403d2a61acd55578c2e80fd233",
+  "size": 8334897976,
+  "sha256": "5aa0d25fc9d35e449b659d0c9a5dcb22e2a4fa04032101b95a39da42b32c1be6"
+ },
+ "facefusion/hyperswap_1a_256.onnx": {
+  "revision": "6271ab1c4619ceb2e534d65e0ec973f22a9aec38",
+  "size": 402742682,
+  "sha256": "c0e98a8a03a238f461ed3d2570e426b49f46745ee400854a60dceeb70c246add"
+ },
+ "facefusion/xseg_1.onnx": {
+  "revision": "c9e3a503d8e84e91c5cd89ee2d510fe5e793e570",
+  "size": 70324286,
+  "sha256": "c4d1498b8a03b5fe2a3a5d2ef2a0402ab03bd51edaf5b2d8d5fb764702a97dd3"
+ },
+ "insightface/models/buffalo_l/det_10g.onnx": {
+  "revision": "33c1063c49c785b7652d3fd529f86fa4f149392b",
+  "size": 16923827,
+  "sha256": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91"
+ },
+ "insightface/models/buffalo_l/w600k_r50.onnx": {
+  "revision": "33c1063c49c785b7652d3fd529f86fa4f149392b",
+  "size": 174383860,
+  "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43"
+ },
+ "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors": {
+  "revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+  "size": 995778752,
+  "sha256": "eb5a71fe4068ee87ccdb1c3aa635e547ca76bd2d30ae20ae889f2c325c0677e8"
+ },
+ "latent_upscale_models/minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors": {
+  "revision": "85a0187096046badc0a71ab6bd6be182ab06c0f4",
+  "size": 690592672,
+  "sha256": "043e5a48e161610ef6c3ea974645220354d06fa618abca15f76d084812eb55c2"
+ },
+ "loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors": {
+  "revision": "4b53a35191437de05370da548e59aeabe2a5a09a",
+  "size": 1956193000,
+  "sha256": "5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c"
+ },
+ "loras/pi_h3_2step_dwd_adapter_int8_convrot.safetensors": {
+  "revision": "4a864589b0fac3d14768f932c930c4dcf1a17b56",
+  "size": 2192176240,
+  "sha256": "ef98527409eee4eaec8183265f4ee22d265680524237fae7149dbc203e11e739"
+ },
+ "loras/pi_h3_4step_dwd_adapter_int8_convrot.safetensors": {
+  "revision": "4a864589b0fac3d14768f932c930c4dcf1a17b56",
+  "size": 2192176240,
+  "sha256": "a2fa1caae2cd4a12f85cc3eccd2a360fe9dabf430623d47deca619605e96ee6d"
+ },
+ "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors": {
+  "revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+  "size": 15372969374,
+  "sha256": "6ce688a0aa98a5fa36a9f1e6c3f42152a498cc2b53ee8c15674c64244f91487f"
+ },
+ "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors": {
+  "revision": "4b53a35191437de05370da548e59aeabe2a5a09a",
+  "size": 15687142551,
+  "sha256": "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"
+ },
+ "text_encoders/qwen3vl_8b_int8_convrot.safetensors": {
+  "revision": "aacf31a6d48e707f352ecba714cee0680da3479b",
+  "size": 9350798360,
+  "sha256": "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"
+ },
+ "vae/ltx-2.5-audio-vae-bf16.safetensors": {
+  "revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+  "size": 364866540,
+  "sha256": "c52733d37f6a7fb7949c3dc0fb468c6cb2169e4d836983a73babb9f0d54837a5"
+ },
+ "vae/ltx-2.5-video-vae-bf16.safetensors": {
+  "revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+  "size": 1472223346,
+  "sha256": "847e14ca7f3355debca0cea4eaa24ac0fbcdf0061da054ac89ca638a869ddba3"
+ },
+ "vae/minimax_h3_audio_vae_fp32.safetensors": {
+  "revision": "4b53a35191437de05370da548e59aeabe2a5a09a",
+  "size": 605254808,
+  "sha256": "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48"
+ },
+ "vae/minimax_h3_video_vae_int8_convrot.safetensors": {
+  "revision": "4b53a35191437de05370da548e59aeabe2a5a09a",
+  "size": 2811065184,
+  "sha256": "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"
+ },
+ "vae/qwen_image_2.1_vae_bf16.safetensors": {
+  "revision": "aacf31a6d48e707f352ecba714cee0680da3479b",
+  "size": 675509688,
+  "sha256": "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"
+ },
+ "vae/seedvr2_ema_vae_fp16.safetensors": {
+  "revision": "df48879708206a403d2a61acd55578c2e80fd233",
+  "size": 501324814,
+  "sha256": "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/config.json": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 4421,
+  "sha256": "aecd2cc4c1fe9edef1cb7ca7c401685a43879ad43f3f9e883f1c6760b61731e0"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/generation_config.json": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 245,
+  "sha256": "f1b90b4513f3b34c62851049e2492d7b4c5940daf1276f89c82b8ef04127f3aa"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/merges.txt": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 1671839,
+  "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/model.safetensors": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 3833402552,
+  "sha256": "391e8db219f292c515297cdceeb43e4eae67cdde35fa57e79a6a8a532fca0522"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/preprocessor_config.json": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 127,
+  "sha256": "efdde1022ea9d76928bf7a9cd53139138f5ba2e466e837f08f6105ab1af1c119"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer/config.json": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 2336,
+  "sha256": "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer/configuration.json": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 76,
+  "sha256": "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer/model.safetensors": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 682293092,
+  "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer/preprocessor_config.json": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 234,
+  "sha256": "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/tokenizer_config.json": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 7344,
+  "sha256": "dc3c31c3bdaedd5016382bb3cbe07323026775ad51f5a4fb564505992ae4a670"
+ },
+ "voice/Qwen3-TTS-12Hz-1.7B-VoiceDesign/vocab.json": {
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "size": 2776833,
+  "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+ },
+ "voice/bigvgan_v2_22khz_80band_256x/bigvgan_generator.pt": {
+  "revision": "633ff708ed5b74903e86ff1298cf4a98e921c513",
+  "size": 449228171,
+  "sha256": "e95ba25972d3de0628d99cd156e9315a9c018899bf739988959ebe3544080ced"
+ },
+ "voice/bigvgan_v2_22khz_80band_256x/config.json": {
+  "revision": "633ff708ed5b74903e86ff1298cf4a98e921c513",
+  "size": 1405,
+  "sha256": "88a1f47acf747db0b21e97a389d838566147f7a5464583ff5c8d819d870f03ee"
+ },
+ "voice/campplus/campplus_cn_common.bin": {
+  "revision": "e4b6ede7ce16997aff4ae69fbca1f0175e2afede",
+  "size": 28036335,
+  "sha256": "3388cf5fd3493c9ac9c69851d8e7a8badcfb4f3dc631020c4961371646d5ada8"
+ },
+ "voice/seed_vc/DiT_seed_v2_uvit_whisper_small_wavenet_bigvgan_pruned.pth": {
+  "revision": "257283f9f41585055e8f858fba4fd044e5caed6e",
+  "size": 440312082,
+  "sha256": "8ec8841b20bb46df9f7e8e570a6946a4b87b940133c7f0e778487ff33841f720"
+ },
+ "voice/seed_vc/config_dit_mel_seed_uvit_whisper_small_wavenet.yml": {
+  "revision": "257283f9f41585055e8f858fba4fd044e5caed6e",
+  "size": 2289,
+  "sha256": "27a91ac41bdb41d0b6951c63642d791b4a70d60b9fc5550eb645f9ddcb3c94da"
+ },
+ "voice/separation/MelBandRoformer_fp16.safetensors": {
+  "revision": "7dc5fa7824f1f3089a5c4b130d767004ccc1ed12",
+  "size": 456479072,
+  "sha256": "6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
+ },
+ "voice/whisper-small/config.json": {
+  "revision": "973afd24965f72e36ca33b3055d56a652f456b4d",
+  "size": 1967,
+  "sha256": "e6a2b489da1b5aed65a8eb8d1e7466fa867ad5643a8bc138ba708bd56b2875c4"
+ },
+ "voice/whisper-small/model.safetensors": {
+  "revision": "973afd24965f72e36ca33b3055d56a652f456b4d",
+  "size": 966995080,
+  "sha256": "1d7734884874f1a1513ed9aa760a4f8e97aaa02fd6d93a3a85d27b2ae9ca596b"
+ },
+ "voice/whisper-small/preprocessor_config.json": {
+  "revision": "973afd24965f72e36ca33b3055d56a652f456b4d",
+  "size": 184990,
+  "sha256": "9b5cd03a36fbb8a627c64d98a5b5b126ead95a77720723944487311f0110b666"
+ }
+}

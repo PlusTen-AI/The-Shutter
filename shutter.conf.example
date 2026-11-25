@@ -1,0 +1,19 @@
+# shutter.conf — read by deploy.sh on the machine you deploy from. Copy to shutter.conf and edit (shutter.conf stays
+# out of git). Paths on the nodes are relative to the node user's home.
+
+# Nodes by short name; the first one is the main node (queue server + worker), the others run a worker.
+NODES="C D"
+# How deploy.sh reaches a node: "$SSH <host> <command>". Through a jump host that knows the node names: SSH="ssh jump ssh".
+SSH="ssh"
+HOST_C=user@192.168.1.10
+HOST_D=user@192.168.1.11
+# Address the other nodes' workers use to reach the main node's server (a fast direct link if there is one), and its port.
+SERVER_ADDR=192.168.1.10
+PORT=8300
+# Data (queue, input cache, results) and the shared models folder (ComfyUI folder layout) on every node.
+DATA=studio/shutter
+MODELS=studio/models
+# Release builds (./deploy.sh build <tag>) clone this repository at <tag>.
+REPO=https://github.com/OWNER/shutter.git
+# Image tag that start.sh / deploy.sh up run (deploy.sh build <tag> makes it; dev = a development build).
+TAG=1.1

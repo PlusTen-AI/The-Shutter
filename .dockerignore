@@ -1,0 +1,8 @@
+# build context = docker/, engine/, server/, worker/ (deploy.sh sends only those; a GitHub build sees the whole repo)
+.git
+.venv
+docs
+golden
+tools
+mac
+**/__pycache__
