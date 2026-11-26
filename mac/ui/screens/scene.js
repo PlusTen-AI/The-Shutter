@@ -3,8 +3,8 @@
 //             image 2 = the place → candidates.
 //   여러 사람 — scene.plate: everyone seated on the wide place at once → ● plate; then cuts drawn on it (drag a box),
 //             each cut re-rendered sharp with the people's pictures (scene.zoom) — same room and seats in every cut.
-// ☆ → this project's 장면 (the video screens' first frames). The draft lives in projects/<p>/drafts/<id>.json.
-import { S, t, html, icon, api, srv, act, toast, poll, filesUrl, jobFileUrl, fmtDur, codeLabel, isStopped, failWord, failColor, tOr } from '../app.js';
+// ☆ → this project's 장면 (the video screens' first frames). The draft lives in projects/<p>/work/drafts/<id>.json.
+import { S, t, html, icon, api, srv, act, toast, poll, filesUrl, jobFileUrl, jobBase, fmtDur, codeLabel, isStopped, failWord, failColor, tOr } from '../app.js';
 import { defaults, cfgFields, cfgInput, cfgOpts, cfgX } from '../models.js';
 import { sideMenu, IMAGE_MENU } from './wip.js';
 import { libraryPicker } from './imagegen.js';
@@ -34,7 +34,7 @@ const genderOf = (code) => (charOf(code) || {}).card ? charOf(code).card.gender 
 const pos = (code) => genderOf(code) === 'female' ? 'her' : 'his';
 const childOf = (code) => !!(((charOf(code) || {}).card || {}).child);   // 기능 13: girl / boy
 const nounOf = (code) => genderOf(code) === 'female' ? (childOf(code) ? 'girl' : 'woman') : (childOf(code) ? 'boy' : 'man');
-const rel = (j, name) => (j.project ? `projects/${j.project}/jobs/${j.id}` : `jobs/${j.id}`) + '/' + name;
+const rel = (j, name) => jobBase(j) + '/' + name;
 const isSaved = (c) => st.saved.some((x) => x.job === c.job && x.name === c.name);
 const people = () => st.people.filter((p) => p.code);
 function pics(code) {   // the pictures a person can come in: master, face panel, expressions (latest versions)
@@ -101,7 +101,7 @@ async function makeCut(i) {   // one cut of the ● plate: crop on the Mac, re-r
   if (!ps.length) return toast(t('sc.needWho'), true);
   const bj = jobOf(st.base.job);
   if (!c.rel) {
-    const r = await act(() => api('/api/crop', { rel: rel(bj, st.base.name), box: c.box }));
+    const r = await act(() => api('/api/crop', { rel: rel(bj, st.base.name), box: c.box, name: (st.title.trim() || t('side.scene')) + '_' + t('sc.cutN', { k: i + 1 }).replace(/\s+/g, '') }));
     if (!r) return;
     c.rel = r.rel;
   }
@@ -466,7 +466,7 @@ async function uploadPlace(f) {
     if (!res.ok) throw new Error(j.error || res.status);
     return j;
   });
-  if (r) { st.place = { rel: 'assets/' + r.saved.split('/assets/').pop(), name: f.name }; ui.pickPlace = false; saveSoon(); }
+  if (r) { st.place = { rel: r.rel, name: f.name }; ui.pickPlace = false; saveSoon(); }
   renderAll();
 }
 async function loadOpen() {
@@ -493,7 +493,7 @@ export default {
     el.addEventListener('pointerup', onUp);
     const shared = (await act(() => api('/api/library?scope=shared'))) || {};
     chars = shared.characters || [];
-    lib = { chars: [], locs: shared.locations || [], scenes: (((await act(() => api('/api/library?scope=project'))) || {}).items || []).filter((i) => i.kind === 'scenes') };
+    lib = { chars: [], locs: shared.locations || [], scenes: (((await act(() => api('/api/library?scope=project'))) || {}).items || []).filter((i) => i.kind === 'images') };
     const id = query.get('d');
     if (id) {
       const d = await act(() => api('/api/doc?kind=drafts&id=' + encodeURIComponent(id)));

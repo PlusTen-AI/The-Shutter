@@ -112,7 +112,7 @@ function delRow(msg) {
 
 function render() {
   if (!root) return;
-  const kinds = tab === 'shared' ? ['all', 'characters', 'locations'] : ['all', 'scenes', 'videos'];
+  const kinds = tab === 'shared' ? ['all', 'characters', 'locations'] : ['all', 'images', 'videos'];
   const items = !data ? [] : tab === 'shared' ? sharedItems() : projectItems().map((i) => ({ key: i.path, i }));
   const cur = (tab === 'shared' && data && !data.error ? sharedItems(true) : items).find((x) => x.key === sel);
   const proj = S.status && S.status.settings && S.status.settings.project;

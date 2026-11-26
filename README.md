@@ -36,8 +36,9 @@ takes a share of the work.
 - **Fetch only what you use.** Models come in groups: images and characters need 25 GB; add video, upscale or voice
   when you need them. Every file is pinned to the exact version shutter was tested with and sha256-checked, and the
   folder can be shared with ComfyUI — no copies.
-- **Simple to run.** One Docker image; a browser UI in English or Korean, run from your own computer (macOS, Linux or
-  Windows with WSL) and saving your work there. The queue lives on the node, so jobs keep running while your laptop sleeps.
+- **Simple to run.** One Docker image; the main node serves a browser UI in English or Korean — open it from any
+  computer on your network. Your work is kept on the main node or, if you like, in a folder shared from your own
+  computer. The queue lives on the node, so jobs keep running while your laptop sleeps.
 
 ## How two nodes share the work
 
@@ -63,7 +64,7 @@ one node, estimate).
 
 ## How it works
 
-- One Docker image. The main node runs the job queue server and a worker; every other node runs a worker.
+- One Docker image. The main node runs the job queue server, a worker and the UI; every other node runs a worker.
 - Models: Qwen-Image 2.1 (images, characters, scenes), MiniMax H3 (reference-to-video and person swap with
   Singularity v1.3 + turbo LoRA; pi-H3 2/4-step for drama shots), LTX-2.5 (image-to-video), SeedVR2 7B (upscale),
   Qwen3-TTS + Seed-VC (voices).
@@ -75,34 +76,45 @@ one node, estimate).
 
 - **GPU nodes**: one or more NVIDIA GB10 (sm_121) machines with Docker and GPU access (`docker run --gpus all`), reachable
   by SSH. Disk for the weights: 25 GB for images and characters, up to 149 GB for everything (see Weights below).
-- **Your computer** (where you work in the browser and where your work is kept): macOS, Linux or Windows with WSL, with
-  Python 3.9+, curl and a browser. macOS needs nothing else. On Linux / WSL add Pillow and PyAV inside the project
-  folder (for crops and thumbnails): `python3 -m venv .venv && .venv/bin/pip install pillow av`.
+- **Your computer**: a browser to work in. To set up, start and stop: bash and SSH (macOS, Linux or Windows with WSL).
+  The UI has no login — keep the nodes on a private network.
 
-Your images, videos and originals stay in a folder you choose on your computer. The nodes only hold working copies:
-a result is removed from the node once your computer has it, and inputs are cached for 3 days (Settings › Keep (days);
-0 removes them at the next clean-up once no job needs them).
+Your work — characters, places, uploads and projects with their results — is kept in one storage folder, set in
+`shutter.conf` (`STORAGE`):
+- empty (default): `~/studio/works` on the main node (kept apart from shutter's own data);
+- `//<computer>/<share>`: a folder shared from your computer over SMB (macOS File Sharing, a Windows shared folder),
+  so originals and results live on your computer. While the share can't be reached the UI shows a red dot and
+  results wait on the main node;
+- `<computer>:/<path>`: the same over NFS — no password; the export allows only the main node;
+- another folder on the main node, e.g. an external disk.
+
+A shared folder is slower than the node's own disk — each screen reads many small files — so connect that computer by
+cable rather than Wi-Fi.
+
+Apart from that the nodes only hold working copies: a result is removed from the node's queue folder once it is in
+the storage folder, and inputs are cached for 3 days (Settings › Keep (days); 0 removes them at the next clean-up once
+no job needs them).
 
 ## Setup
 
-Everything is run from your computer. The nodes need no copy of this repository — step 3 makes each of them build the
+Setup is run from your computer over SSH. The nodes need no copy of this repository — step 3 makes each of them build the
 image from GitHub by itself.
 
 1. **Your computer — get the code.**
    ```bash
    git clone <this repository's URL> shutter && cd shutter
-   python3 -m venv .venv && .venv/bin/pip install pillow av     # Linux / WSL only
    ```
 2. **Your computer — settings.**
    ```bash
-   cp shutter.conf.example shutter.conf             # your nodes (one is fine), SSH access, folders, REPO = this repository
-   cp mac/settings.example.json mac/settings.json   # server = http://<main node>:8300, storage = the folder for your work
+   cp shutter.conf.example shutter.conf   # nodes (one is fine), SSH access, folders, UI address, storage, REPO, TAG
    ```
-3. **Your computer — build on the nodes.** `./deploy.sh build 1.1`: every node fetches tag 1.1 from GitHub and builds
-   the image `shutter:1.1` (the first build compiles the engine and takes a while).
+3. **Your computer — build on the nodes.** `./deploy.sh build <tag>` with the latest release tag (also `TAG=` in
+   shutter.conf): every node fetches that tag from GitHub and builds the image `shutter:<tag>` (the first build
+   compiles the engine and takes a while).
 4. **Each node — fetch the weights**, only the groups you need (next section).
-5. **Your computer — start.** `./start.sh` starts the node containers and the UI; open http://127.0.0.1:8310.
-   `./stop.sh` stops the nodes first (a running unit goes back to the queue), then the UI.
+5. **Your computer — start.** `./start.sh` starts the node containers and the UI on the main node; open
+   `http://<main node>:8310` (UI_ADDR in shutter.conf) in any browser on your network. `./stop.sh` stops the nodes
+   first (a running unit goes back to the queue), then the UI.
 
 ### Weights
 

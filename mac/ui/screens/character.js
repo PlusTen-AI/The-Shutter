@@ -693,7 +693,7 @@ async function onChange(e) {
       return j;
     });
     ui.upload = false;
-    if (r) st.outfitImage = { rel: 'assets/' + r.saved.split('/assets/').pop(), name: f.name };
+    if (r) st.outfitImage = { rel: r.rel, name: f.name };
     renderSet(); renderActions(); renderOut();
     if (st.code) save();
   } else if (d.voicefile !== undefined && e.target.files[0]) {   // the boss's own recording → ● reference voice at once
@@ -705,7 +705,7 @@ async function onChange(e) {
       if (!res.ok) throw new Error(j.error || res.status);
       return j;
     });
-    const sv = r && await act(() => api('/api/voice/save', { code: st.code, asset: 'assets/' + r.saved.split('/assets/').pop(), file: f.name }));
+    const sv = r && await act(() => api('/api/voice/save', { code: st.code, asset: r.rel, file: f.name }));
     ui.voiceUp = false;
     if (sv) { st.voices = sv.voices; toast(t('ch.voiceSaved', { name: sv.saved })); }
     renderVoice();

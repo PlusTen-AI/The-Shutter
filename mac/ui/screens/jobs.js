@@ -1,5 +1,5 @@
 // 작업: queue + progress + failed (resume) + recent, one screen (design §11)
-import { S, t, html, icon, srv, api, act, toast, jobKind, jobTitle, fmtAgo, fmtDur, nodes, jobFileUrl, filesUrl, fmtBytes, poll, enter, isStopped, failColor } from '../app.js';
+import { S, t, html, icon, srv, api, act, toast, jobKind, jobTitle, fmtAgo, fmtDur, nodes, jobFileUrl, jobBase, filesUrl, fmtBytes, poll, enter, isStopped, failColor } from '../app.js';
 
 let root = null, ask = null, view = 'now', recs = null, rq = '', recTimer = 0;
 const open = new Set();
@@ -123,8 +123,7 @@ async function loadRecords() {
   render();
 }
 function recFileUrl(r, name) {
-  const base = r.project ? `projects/${r.project}/jobs/${r.id}` : `jobs/${r.id}`;
-  return filesUrl(base + '/' + name);
+  return filesUrl(jobBase(r) + '/' + name);
 }
 function records() {
   const keyOpts = (o) => Object.entries(o).filter(([k, v]) => v !== '' && v != null && !['prompt', 'h3_prompt', 'edit_prompt', 'edit_prompt_part', 'bg_prompt', 'shots'].includes(k))

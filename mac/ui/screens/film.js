@@ -2,7 +2,7 @@
 // video.edit) in order → one film by stream copy (video.join). Upscale is all or nothing (boss): "모든 조각 업스케일"
 // upscales each part (video.upscale, C·D share the chunks) and the film then takes the upscaled ones; a mix of sizes
 // is warned about (기능 7) and the odd parts are re-encoded by the join. 화 끊기 (off by default, boss): a white flash
-// at each episode break + one file per episode. The film's state lives in projects/<p>/films/film.json.
+// at each episode break + one file per episode. The film's state lives in projects/<p>/work/films/film.json.
 import { S, t, html, icon, api, act, toast, poll, filesUrl, jobFileUrl, fmtDur, isStopped, failWord } from '../app.js';
 import { sideMenu, VIDEO_MENU } from './wip.js';
 

@@ -1,7 +1,7 @@
 // 영상 생성 › 마무리 — finishing from an uploaded file (boss, session #13: the library is not kept, a finished video is
 // uploaded and finished here): face pass (video.face, the characters' master + sheet) → upscale (video.upscale), in
 // that order, each optional. Upscale can be turned on after the face pass is done. The draft lives on the Mac in
-// projects/<p>/drafts/<id>.json (screen 'finish') until 보관함에 저장 / 닫기; #/video/finish?d=<id> reopens it.
+// projects/<p>/work/drafts/<id>.json (screen 'finish') until 보관함에 저장 / 닫기; #/video/finish?d=<id> reopens it.
 import { S, t, html, icon, api, srv, act, toast, poll, filesUrl, jobFileUrl, fmtDur, enter, codeLabel, codeLabelOf, isStopped, failWord } from '../app.js';
 import { sideMenu, VIDEO_MENU } from './wip.js';
 
@@ -74,7 +74,7 @@ async function upload(f) {
     return j;
   });
   ui.uploading = false;
-  if (r) Object.assign(st.video, meta, { sha: r.sha, rel: 'assets/' + r.saved.split('/assets/').pop() });
+  if (r) Object.assign(st.video, meta, { sha: r.sha, rel: r.rel });
   else st.video = null;
   renderAll();
 }

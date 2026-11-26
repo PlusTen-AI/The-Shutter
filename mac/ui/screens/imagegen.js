@@ -1,7 +1,7 @@
 // 이미지 › 생성 (image.t2i) / 편집 (image.edit) — two panes (design §11): settings left, candidates right. Candidates:
 // ☆ save many (→ this project's 장면 on 보관함에 저장 / 닫기), "편집에 쓰기" puts one into 편집 as image 1. The draft
-// lives on the Mac in projects/<p>/drafts/<id>.json until 보관함에 저장 / 닫기; #/image/gen?d=<id> reopens it.
-import { S, t, html, icon, api, srv, act, toast, poll, filesUrl, jobFileUrl, fmtDur, enter, isStopped, failWord, failColor } from '../app.js';
+// lives in projects/<p>/work/drafts/<id>.json until 보관함에 저장 / 닫기; #/image/gen?d=<id> reopens it.
+import { S, t, html, icon, api, srv, act, toast, poll, filesUrl, jobFileUrl, jobBase, fmtDur, enter, isStopped, failWord, failColor } from '../app.js';
 import { defaults, cfgFields, cfgInput, cfgOpts, cfgX } from '../models.js';
 import { sideMenu, IMAGE_MENU } from './wip.js';
 
@@ -25,7 +25,7 @@ const jobOf = (id) => S.jobs.find((j) => j.id === id) || null;
 const key = () => JSON.stringify([st.prompt.trim(), st.refs.map((r) => r.rel), st.aspect, Number(st.mp), Number(st.steps), cfgOpts(st)]);
 const started = () => st.jobs.length > 0;
 const active = () => st.jobs.map((x) => jobOf(x.job)).some((j) => j && (j.state === 'pending' || j.state === 'running'));
-const rel = (j, name) => (j.project ? `projects/${j.project}/jobs/${j.id}` : `jobs/${j.id}`) + '/' + name;
+const rel = (j, name) => jobBase(j) + '/' + name;
 const isSaved = (c) => st.saved.some((x) => x.job === c.job && x.name === c.name);
 
 function cands() {
@@ -89,7 +89,7 @@ async function upload(f) {
     return j;
   });
   ui.uploading = false;
-  if (r && st.refs.length < MAX_REFS) { st.refs.push({ rel: 'assets/' + r.saved.split('/assets/').pop(), name: f.name }); ui.pick = false; saveSoon(); }
+  if (r && st.refs.length < MAX_REFS) { st.refs.push({ rel: r.rel, name: f.name }); ui.pick = false; saveSoon(); }
   renderAll();
 }
 async function finish(saveIt) {
@@ -121,7 +121,7 @@ export function libraryPicker(l, title) {   // shared with the scene screen: pro
     <div class="row" style="justify-content: space-between; flex-wrap: nowrap"><span class="lbl">${title}</span>
       <button type="button" class="ib m" data-act="unpick" aria-label="${t('common.cancel')}" title="${t('common.cancel')}">${icon('x', 14)}</button></div>
     <label class="btn ghost" style="align-self: flex-start; cursor: pointer">${icon('up', 14)}${t('vg.upload')}<input type="file" accept="image/*" data-file="ref" hidden></label>
-    ${group(t('lib.kind.scenes'), l.scenes.map((i) => ({ rel: i.path, name: i.name })))}
+    ${group(t('lib.kind.images'), l.scenes.map((i) => ({ rel: i.path, name: i.name })))}
     ${group(t('lib.kind.characters'), chars)}
     ${group(t('lib.kind.locations'), l.locs.filter((x) => x.master).map((x) => ({ rel: `locations/${x.code}/${x.master}`, name: x.code })))}</div>`;
 }
@@ -288,7 +288,7 @@ export default {
     if (screen === 'edit') {
       const shared = (await act(() => api('/api/library?scope=shared'))) || {};
       lib = { chars: shared.characters || [], locs: shared.locations || [],
-        scenes: (((await act(() => api('/api/library?scope=project'))) || {}).items || []).filter((i) => i.kind === 'scenes') };
+        scenes: (((await act(() => api('/api/library?scope=project'))) || {}).items || []).filter((i) => i.kind === 'images') };
     }
     await loadOpen();
     renderAll();

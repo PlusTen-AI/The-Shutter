@@ -73,7 +73,7 @@ async function pickVideo(f) {
   ui.uploading = false;
   if (!r) return renderAll();
   st.video.sha = r.sha;
-  st.video.rel = 'assets/' + r.saved.split('/assets/').pop();
+  st.video.rel = r.rel;
   ui.probing = true; renderAll();
   const p = await act(() => api('/api/srv/jobs', { type: 'video.probe', inputs: { video: r.sha }, options: {} }));
   if (p) st.probe = { job: p.id };

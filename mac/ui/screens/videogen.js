@@ -1,6 +1,6 @@
 // 영상 생성 › 한 컷 (design §11): settings left (입력 · 인물 · 모델 · 길이 · 마무리, all chosen before 시작, never
 // folds), results right (생성 → 다듬기 → 업스케일) filled in place. The cut lives on the Mac in
-// projects/<p>/cuts/<id>.json until 보관함에 저장 / 닫기; #/video/one?cut=<id>[&seq=<id>] reopens it (a sequence's cut).
+// projects/<p>/work/cuts/<id>.json until 보관함에 저장 / 닫기; #/video/one?cut=<id>[&seq=<id>] reopens it (a sequence's cut).
 import { S, t, html, icon, api, srv, act, toast, poll, filesUrl, fmtDur, enter, codeLabel, codeLabelOf, failWord, failColor } from '../app.js';
 import { MODELS } from '../models.js';
 import { sideMenu, VIDEO_MENU } from './wip.js';
@@ -73,7 +73,7 @@ async function upload(slot, f) {
     return j;
   });
   ui.uploading = false;
-  if (r) { st[slot] = { rel: 'assets/' + r.saved.split('/assets/').pop(), name: f.name }; ui.pick = null; saveSoon(); }
+  if (r) { st[slot] = { rel: r.rel, name: f.name }; ui.pick = null; saveSoon(); }
   renderAll();
   if (r) followFrame(slot);
 }
@@ -399,7 +399,7 @@ export default {
     el.addEventListener('change', onChange);
     const lib = await act(() => api('/api/library?scope=shared')) || {};
     chars = lib.characters || []; locs = lib.locations || [];
-    scenes = ((await act(() => api('/api/library?scope=project')) || {}).items || []).filter((i) => i.kind === 'scenes');
+    scenes = ((await act(() => api('/api/library?scope=project')) || {}).items || []).filter((i) => i.kind === 'images');
     const cid = query.get('cut'), sid = query.get('seq');
     seq = sid ? await act(() => api('/api/doc?kind=sequences&id=' + encodeURIComponent(sid))) : null;
     if (seq && !seq.id) seq = null;

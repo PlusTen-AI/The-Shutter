@@ -146,10 +146,9 @@ export async function act(fn, okMsg) {
 
 // ---- small shared helpers ----
 export function filesUrl(rel) { return '/files/' + rel.split('/').map(encodeURIComponent).join('/'); }
-export function jobFileUrl(job, name) {
-  const base = job.project ? `projects/${job.project}/jobs/${job.id}` : `jobs/${job.id}`;
-  return filesUrl(base + '/' + name);
-}
+// a job's result folder under the storage location (mac.py job_dir): projects/<p>/work/jobs/<id>, no project → default
+export const jobBase = (j) => `projects/${j.project || (S.status || {}).default_project}/work/jobs/${j.id}`;
+export function jobFileUrl(job, name) { return filesUrl(jobBase(job) + '/' + name); }
 export function fmtBytes(n) {
   if (n == null) return '—';
   const u = ['B', 'KB', 'MB', 'GB', 'TB'];

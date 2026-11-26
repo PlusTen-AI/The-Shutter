@@ -1,8 +1,11 @@
-# build context = docker/, engine/, server/, worker/ (deploy.sh sends only those; a GitHub build sees the whole repo)
+# build context = docker/, engine/, server/, worker/, the UI in mac/ (deploy.sh sends only those; a GitHub build sees the
+# whole repo)
 .git
 .venv
 docs
 golden
 tools
-mac
+mac/settings.json
+mac/mac.log
+mac/mac.pid
 **/__pycache__

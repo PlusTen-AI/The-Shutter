@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
-"""shutter-mac: browser UI server + result sync on the machine you work from. macOS: standard library only (stock
-python3 3.9). Linux / WSL: python3 + curl, and Pillow + PyAV in .venv for crops and thumbnails (start.sh uses it).
+"""shutter UI: browser UI server + result sync. It runs on the main node in its own container (deploy.sh: shutter-ui,
+http://<main node>:8310) with the storage folder mounted at a fixed path — the main node's folder or a folder shared from
+your computer over SMB (shutter.conf STORAGE). It also runs by hand for development (tools/replay): macOS standard
+library only (stock python3 3.9), elsewhere python3 + curl + Pillow / PyAV.
 
   python3 mac/mac.py   → http://localhost:8310
-The UI forwards the job API as /api/srv/... to the server (C) unchanged. The Hermes skill can call the server API directly.
-Source assets and results live in the storage location (settings):  <storage>/assets/<sha256><ext> (shared),
-<storage>/projects/<project>/jobs/<job>/<file> (each result as soon as its unit ends, §8), saved project items in
-<storage>/projects/<project>/{scenes,videos}/. Jobs from before projects: <storage>/jobs/<job>/.
+  env: SHUTTER_MAC_HOST (bind address, default 127.0.0.1), SHUTTER_MAC_PORT, SHUTTER_MAC_SETTINGS (settings file),
+       SHUTTER_MAC_STORAGE / SHUTTER_MAC_SERVER (fixed storage folder / server address: the settings screen shows them
+       read-only), SHUTTER_MAC_STORAGE_LABEL (where that folder really is, for the settings screen)
+The UI forwards the job API as /api/srv/... to the server unchanged. The Hermes skill can call the server API directly.
+Storage layout (boss, session #20 — folders a person opens, the screens' own data in one place):
+  <storage>/characters/ locations/ props/   registered codes (shared)
+  <storage>/uploads/<uploaded file name>    the files you uploaded and crops (shared)
+  <storage>/projects/<project>/images/ videos/ script/   saved images and videos, the script
+  <storage>/projects/<project>/work/        what the screens keep: jobs/<job>/<file> (each result as soon as its unit
+                                            ends, §8), cuts/ sequences/ drafts/ films/ — not for opening by hand
+A job without a project goes to the default project (기본 / default).
 Without the storage location (external drive unplugged) results wait on the node and are saved once it is back (#21);
 new jobs cannot be submitted meanwhile.
 
@@ -15,34 +24,40 @@ Asset codes (production ch. 2 file names):  <storage>/characters/FL01/{card.json
 The master (ref) / anchor is the one with the highest version number. Derives always start from the master. Adopting
 copies to the next version name (never overwrites).
 """
-import hashlib, json, mimetypes, os, re, shutil, subprocess, threading, time
+import hashlib, json, mimetypes, os, re, shutil, signal, subprocess, sys, threading, time, unicodedata
 import script   # 화 파일 (docs/script.md)
+from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, unquote, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SETTINGS = os.environ.get('SHUTTER_MAC_SETTINGS', os.path.join(HERE, 'settings.json'))
 PORT = int(os.environ.get('SHUTTER_MAC_PORT', '8310'))
+HOST = os.environ.get('SHUTTER_MAC_HOST', '127.0.0.1')
+FIXED = {k: os.environ[e] for k, e in (('storage', 'SHUTTER_MAC_STORAGE'), ('server', 'SHUTTER_MAC_SERVER')) if os.environ.get(e)}
+STORAGE_LABEL = os.environ.get('SHUTTER_MAC_STORAGE_LABEL', '')
 DEFAULTS = {'server': 'http://127.0.0.1:8300', 'storage': '', 'project': '', 'lang': 'ko', 'notify': True,
             'defaults': {}, 'record_days': 30}   # settings.json (template settings.example.json). defaults = per-model job defaults (UI)
 CHUNK = 1 << 20
-JOBS = 'jobs'   # job results arrive in <storage>/jobs/<job>/. Adopting copies into the code folder, deletes the job folder
 status = {'server_ok': False, 'waiting': 0, 'error': None, 'last_sync': None, 'workers': {}}
 UI = os.path.join(HERE, 'ui')
 PROJECT_RE = r'[^./\\:\x00-\x1f][^/\\:\x00-\x1f]{0,59}'   # folder name: no slash, no leading dot
-LIB_KINDS = {'scenes': '.png', 'videos': '.mp4'}   # saved project items
+LIB_KINDS = {'images': '.png', 'videos': '.mp4'}   # saved project items: projects/<p>/images/, videos/
+UPLOADS = 'uploads'   # <storage>/uploads/: uploaded originals and crops, shared by every project
+WORK = 'work'   # projects/<p>/work/: job results (adopting copies into the code folder, deletes the job folder) + screen docs
 
 
 def settings():
     try:
         with open(SETTINGS) as f:
-            return dict(DEFAULTS, **json.load(f))
+            return dict(DEFAULTS, **dict(json.load(f), **FIXED))
     except (OSError, ValueError):
-        return dict(DEFAULTS)
+        return dict(DEFAULTS, **FIXED)
 
 
 def storage_ok(s):
-    # never create the storage folder. With the external drive unplugged, the same path must not appear on the Mac disk
+    # never create the storage folder. With the external drive unplugged (or the SMB share gone), the same path must not
+    # appear on the local disk
     return bool(s['storage']) and os.path.isdir(s['storage'])
 
 
@@ -79,6 +94,53 @@ def sha_file(path):
         for b in iter(lambda: f.read(CHUNK), b''):
             h.update(b)
     return h.hexdigest()
+
+
+# ---- <storage>/uploads/: uploaded originals and crops under readable names (boss, session #20 — was <sha>.<ext>). Job
+# records name inputs by sha, so a lookup hashes the folder, remembering (path, size, mtime) → sha while mac.py runs ----
+SHA_MEMO = {}
+
+
+def sha_cached(path):
+    st = os.stat(path)
+    k = (path, st.st_size, st.st_mtime_ns)
+    if k not in SHA_MEMO:
+        SHA_MEMO[k] = sha_file(path)
+    return SHA_MEMO[k]
+
+
+def asset_by_sha(s, sha):
+    """The file in <storage>/uploads with this content → its path, or None."""
+    d = os.path.join(s['storage'], UPLOADS)
+    if not re.fullmatch(r'[0-9a-f]{64}', str(sha)) or not storage_ok(s) or not os.path.isdir(d):
+        return None
+    for n in sorted(os.listdir(d)):
+        p = os.path.join(d, n)
+        if not n.startswith('.') and os.path.isfile(p) and sha_cached(p) == sha:
+            return p
+    return None
+
+
+def keep_asset(tmp, name, sha):
+    """A finished temp file in <storage>/uploads → kept as <name>, or <stem>_2<ext> … when another file has that name.
+    The same content already under one of those names is reused (tmp removed). → its path"""
+    name = unicodedata.normalize('NFC', os.path.basename(str(name or '').replace('\\', '/')).strip())
+    stem, ext = os.path.splitext(re.sub(r'[\x00-\x1f/:]', '_', name).lstrip('.'))
+    stem, ext, k = stem[:80] or 'file', ext.lower()[:10], 1
+    while True:
+        dest = os.path.join(os.path.dirname(tmp), stem + ext if k == 1 else '%s_%d%s' % (stem, k, ext))
+        if os.path.exists(dest):
+            if os.path.getsize(dest) == os.path.getsize(tmp) and sha_cached(dest) == sha:
+                os.remove(tmp)
+                return dest
+        else:
+            try:
+                open(dest, 'xb').close()   # claim the name (another upload may pick the same one)
+            except FileExistsError:
+                continue
+            os.replace(tmp, dest)
+            return dest
+        k += 1
 
 
 # ---- pictures on the machine the UI runs on (crops, thumbnails of unsaved candidates): Pillow / PyAV when installed
@@ -172,8 +234,9 @@ def send_to_node(path):
     return sha, sent
 
 
-# ---- projects (boss, session #10): characters/, locations/, assets/ shared at the storage root; per project
-# projects/<name>/ holds job results, scenes and videos. The current project is in the settings ----
+# ---- projects (boss, session #10): characters/, locations/, props/, uploads/ shared at the storage root; per project
+# projects/<name>/ holds saved images and videos, the script and work/ (job results, screen docs). The current project
+# is in the settings ----
 def projects(s):
     d = os.path.join(s['storage'], 'projects')
     return sorted(n for n in os.listdir(d) if os.path.isdir(os.path.join(d, n)) and not n.startswith('.')) \
@@ -190,32 +253,36 @@ def new_project(s, name):
     return name
 
 
+def default_project(s):
+    """Jobs without a project (and the first job before any project exists) go to this one."""
+    return '기본' if s.get('lang', 'ko') == 'ko' else 'default'
+
+
 def job_dir(s, job, project=None):
-    """Where a job's results go on the Mac: <storage>/projects/<project>/jobs/<job>, or <storage>/jobs/<job> for jobs
-    without a project (before session #10)."""
-    if project:
-        return os.path.join(s['storage'], 'projects', project, 'jobs', job)
-    return os.path.join(s['storage'], JOBS, job)
+    """Where a job's results go: <storage>/projects/<project>/work/jobs/<job> (no project → the default project)."""
+    return os.path.join(s['storage'], 'projects', project or default_project(s), WORK, 'jobs', job)
 
 
 def find_job_dir(s, job):
     """A job's result folder on the Mac, whichever project it belongs to (None if not there)."""
     if not re.fullmatch(r'[\w.-]+', job or '') or not storage_ok(s):
         return None
-    for d in [job_dir(s, job)] + [job_dir(s, job, p) for p in projects(s)]:
+    for d in [job_dir(s, job, p) for p in projects(s)]:
         if os.path.isdir(d):
             return d
     return None
 
 
 def submit(s, job):
-    """Submit a job to the server under the current project. No storage location → no new jobs (results would have
-    nowhere to go)."""
+    """Submit a job to the server under the current project (none yet → the default project, made and selected). No
+    storage location → no new jobs (results would have nowhere to go)."""
     if not storage_ok(s):
         raise Bad('저장 위치 없음 · 새 작업은 연결된 뒤에')
     job = dict(job)
-    if s.get('project'):
-        job['project'] = s['project']
+    if not s.get('project'):
+        s['project'] = new_project(s, default_project(s))
+        write_json(SETTINGS, {k: v for k, v in s.items() if k not in FIXED})
+    job['project'] = s['project']
     return srv('POST', '/jobs', json.dumps(job).encode())
 
 
@@ -234,7 +301,7 @@ def retry(s, b):
     return code, body
 
 
-# ---- 보관함: shared characters / locations (code folders) and the current project's saved scenes / videos ----
+# ---- 보관함: shared characters / locations (code folders) and the current project's saved images / videos ----
 def project_items(s, project):
     out = []
     root = os.path.join(s['storage'], 'projects', project)
@@ -267,15 +334,15 @@ def library(s, scope):
 
 
 def save_item(s, b):
-    """"보관함에 저장": copy one result of a job into the current project (scenes / videos) under a free name, with its
+    """"보관함에 저장": copy one result of a job into the current project (images / videos) under a free name, with its
     settings json (result json + job id)."""
     job, name = str(b.get('job', '')), str(b.get('name', ''))
     if not s.get('project'):
         raise Bad('프로젝트 없음')
-    kind = 'videos' if name.endswith('.mp4') else 'scenes' if name.endswith('.png') else None
+    kind = 'videos' if name.endswith('.mp4') else 'images' if name.endswith('.png') else None
     src_dir = find_job_dir(s, job)
     if not kind or not src_dir or not re.fullmatch(r'[\w.-]+', name) or not os.path.isfile(os.path.join(src_dir, name)):
-        raise Bad('결과가 맥에 없음: %s/%s' % (job, name))
+        raise Bad('결과가 저장 위치에 없음: %s/%s' % (job, name))
     d = os.path.join(s['storage'], 'projects', s['project'], kind)
     os.makedirs(d, exist_ok=True)
     stem = re.sub(r'[^\w.-]+', '_', str(b.get('title') or '').strip()) or '%s_%s' % (job, name[:-4])
@@ -603,7 +670,7 @@ def code_job(s, b):
         if base.get('job'):   # the character workflow's ● base candidate, not registered yet
             m = os.path.join(find_job_dir(s, str(base['job'])) or '', str(base.get('name', '')))
             if not re.fullmatch(r'[\w.-]+\.png', str(base.get('name', ''))) or not os.path.isfile(m):
-                raise Bad('선택한 대표 이미지가 맥에 없음')
+                raise Bad('선택한 대표 이미지가 저장 위치에 없음')
         if not m:
             raise Bad('%s 의 대표 이미지 없음 · 먼저 등록 필요' % code)
         inputs['image_1'] = send_to_node(m)[0]
@@ -699,7 +766,7 @@ def storage_file(s, rel):
     root = os.path.realpath(s['storage'])
     p = os.path.realpath(os.path.join(root, str(rel)))
     if not storage_ok(s) or not p.startswith(root + os.sep) or not os.path.isfile(p):
-        raise Bad('파일이 맥에 없음: %s' % rel)
+        raise Bad('파일이 저장 위치에 없음: %s' % rel)
     return p
 
 
@@ -739,13 +806,13 @@ def tts_job(s, b):
 
 def save_voice(s, b):
     """● on a voice candidate (job, name: voice_<k>.wav of an audio.tts job) or an uploaded recording (asset:
-    assets/<sha>.<ext>, file: its name) → <code>_voice_vN.<ext> (never overwrites) + its json."""
+    uploads/<name>.<ext>, file: its name) → <code>_voice_vN.<ext> (never overwrites) + its json."""
     code = str(b.get('code', '')).strip()
     if cat_of(code) != 'characters':
         raise Bad('캐릭터 코드가 아님: %s' % code)
     if b.get('asset'):
         rel = str(b['asset'])
-        if not re.fullmatch(r'assets/[0-9a-f]{64}\.(%s)' % VOICE_EXT, rel.lower()):
+        if not re.fullmatch(UPLOADS + r'/[^/]+\.(%s)' % VOICE_EXT, rel.lower()):
             raise Bad('목소리 파일은 %s' % VOICE_EXT.replace('|', '·'))
         src, ext, meta = storage_file(s, rel), rel.rsplit('.', 1)[1].lower(), {'asset': rel, 'file': str(b.get('file') or '')[:200]}
     else:
@@ -754,7 +821,7 @@ def save_voice(s, b):
             raise Bad('코드·작업·파일 이름이 맞지 않음')
         src, ext, meta = os.path.join(find_job_dir(s, job) or '', name), 'wav', {'job': job, 'result': name, 'instruct': b.get('instruct'), 'text': b.get('text')}
     if not os.path.isfile(src):
-        raise Bad('파일이 아직 맥에 없음: %s' % os.path.basename(src))
+        raise Bad('파일이 아직 저장 위치에 없음: %s' % os.path.basename(src))
     d = code_dir(s, base_of(code))
     v = max([int(re.search(r'_v(\d+)\.\w+$', n).group(1)) for n in voice_files(s, code)] or [0])
     while True:
@@ -780,7 +847,7 @@ def voice_job(s, b):
     job, name = str(b.get('job', '')), str(b.get('name', ''))
     src = os.path.join(find_job_dir(s, job) or '', name)
     if not (re.fullmatch(r'[\w.-]+\.mp4', name) and os.path.isfile(src)):
-        raise Bad('컷 결과가 맥에 없음: %s/%s' % (job, name))
+        raise Bad('컷 결과가 저장 위치에 없음: %s/%s' % (job, name))
     codes = []
     for x in b.get('say') or []:
         c = str((x or {}).get('code', '')).strip()
@@ -868,17 +935,17 @@ def image_job(s, b):
 
 
 def crop_image(s, b):
-    """A part of a storage image (box = [x0, y0, x1, y1] as fractions) → a new png in <storage>/assets → its path. The
-    scene workflow cuts shots out of the seated wide plate this way (scene.zoom)."""
+    """A part of a storage image (box = [x0, y0, x1, y1] as fractions) → a new png in <storage>/uploads, named
+    <name or the source's name>_crop.png → its path. The scene workflow cuts shots out of the seated wide plate this way
+    (scene.zoom)."""
     src = storage_file(s, b.get('rel'))
     box = [min(1.0, max(0.0, float(v))) for v in b.get('box') or []]
-    d = os.path.join(s['storage'], 'assets')
+    d = os.path.join(s['storage'], UPLOADS)
     os.makedirs(d, exist_ok=True)
     tmp = os.path.join(d, '.crop-%d.png' % threading.get_ident())
     img_crop(src, box, tmp)
-    sha = sha_file(tmp)
-    os.replace(tmp, os.path.join(d, sha + '.png'))
-    return 'assets/%s.png' % sha
+    name = str(b.get('name') or '').strip() or os.path.splitext(os.path.basename(src))[0]
+    return UPLOADS + '/' + os.path.basename(keep_asset(tmp, name + '_crop.png', sha_file(tmp)))
 
 
 def concat_job(s, b):
@@ -891,7 +958,7 @@ def concat_job(s, b):
         job, name = str(it.get('job', '')), str(it.get('name', ''))
         src = os.path.join(find_job_dir(s, job) or '', name)
         if not (re.fullmatch(r'[\w.-]+\.mp4', name) and os.path.isfile(src)):
-            raise Bad('컷 결과가 맥에 없음: %s/%s' % (job, name))
+            raise Bad('컷 결과가 저장 위치에 없음: %s/%s' % (job, name))
         inputs['video_%d' % k] = send_to_node(src)[0]
     return submit(s, {'type': 'video.concat', 'inputs': inputs, 'options': {'asset_kind': str(b.get('label') or '')[:80]}})
 
@@ -903,7 +970,7 @@ def mac_video(s, it):
     job, name = str(it.get('job', '')), str(it.get('name', ''))
     src = os.path.join(find_job_dir(s, job) or '', name)
     if not (re.fullmatch(r'[\w.-]+', job) and re.fullmatch(r'[\w.-]+\.mp4', name) and os.path.isfile(src)):
-        raise Bad('영상이 맥에 없음: %s/%s' % (job, name))
+        raise Bad('영상이 저장 위치에 없음: %s/%s' % (job, name))
     return src
 
 
@@ -982,7 +1049,7 @@ def ref_path(s, r, frames=None):
             raise Bad('%s 그림 없음%s' % (r['code'], ': ' + r['view'] if r['view'] else ''))
         return rel_of(s, p)
     if k == 'lib':
-        p = os.path.join(s['storage'], 'projects', s['project'], 'scenes', r['name'] + '.png')
+        p = os.path.join(s['storage'], 'projects', s['project'], 'images', r['name'] + '.png')
         if not os.path.isfile(p):
             raise Bad('보관함에 없음: %s' % r['name'])
         return rel_of(s, p)
@@ -1085,7 +1152,7 @@ def frame_job(s, b):
         if not pl.get('rel'):
             raise Bad('판 %s ● 없음' % f.get('plate'))
         box = box_for(f, pl['spec'], pl.get('people') or [], (1920, 1088) if pl['spec'].get('orient', 'h') == 'h' else (1088, 1920))
-        crop = crop_image(s, {'rel': pl['rel'], 'box': box})
+        crop = crop_image(s, {'rel': pl['rel'], 'box': box, 'name': '%s_%s' % (os.path.splitext(os.path.basename(pl['rel']))[0], f.get('id', ''))})
         on, codes, faces = f['on'], [q['pic']['code'] for q in pl['spec']['people']], pl.get('people') or []
 
         def fx(r):   # left to right on the plate: the face box centre (the person line order when no face was found)
@@ -1204,7 +1271,7 @@ def doc_path(s, kind, did):
         raise Bad('문서 이름이 맞지 않음')
     if not storage_ok(s) or not s.get('project'):
         raise Bad('저장 위치·프로젝트 없음')
-    return os.path.join(s['storage'], 'projects', s['project'], kind, did + '.json')
+    return os.path.join(s['storage'], 'projects', s['project'], WORK, kind, did + '.json')
 
 
 def docs(s, kind, ids=None):
@@ -1256,12 +1323,12 @@ def finish(s, b):
 
 
 def on_node(s, sha):
-    """Make sure the sha file is in the node asset cache. If not, resend the Mac original (<storage>/assets/<sha>.*)."""
+    """Make sure the sha file is in the node asset cache. If not, resend the Mac original (<storage>/assets, found by content)."""
     if srv('HEAD', '/assets/' + sha)[0] == 200:
         return
     src = find_sha(s, sha)
     if not src:
-        raise Bad('노드에도 맥에도 원본 없음: %s' % sha[:12])
+        raise Bad('노드에도 저장 위치에도 원본 없음: %s' % sha[:12])
     send_to_node(src)
 
 
@@ -1291,7 +1358,7 @@ def refine_job(s, b):
         refs = r
         lat = os.path.join(find_job_dir(s, job) or '', 'shot_%02d_pre.lat' % k)
         if not os.path.isfile(lat):
-            raise Bad('미리보기 잠재 파일이 맥에 없음: %s 컷 %d' % (job, k))
+            raise Bad('미리보기 잠재 파일이 저장 위치에 없음: %s 컷 %d' % (job, k))
         inputs['lat_%d' % i] = send_to_node(lat)[0]
         for g in ('first', 'last'):   # the shot's start / end frame guides, as in pass 1
             if j['inputs'].get('%s_%d' % (g, k)):
@@ -1318,7 +1385,7 @@ def upscale_job(s, b):
         root = os.path.realpath(s['storage'])
         src = os.path.realpath(os.path.join(root, str(b['path'])))
         if not src.startswith(root + os.sep) or not src.endswith('.mp4') or not os.path.isfile(src):
-            raise Bad('영상이 맥에 없음: %s' % b['path'])
+            raise Bad('영상이 저장 위치에 없음: %s' % b['path'])
         opts = {'from': [str(b['path'])]}
     else:
         job, name = str(b.get('job', '')), str(b.get('name', ''))
@@ -1326,7 +1393,7 @@ def upscale_job(s, b):
             raise Bad('작업·파일 이름이 맞지 않음')
         src = os.path.join(find_job_dir(s, job) or '', name)
         if not os.path.isfile(src):
-            raise Bad('영상이 맥에 없음: %s/%s' % (job, name))
+            raise Bad('영상이 저장 위치에 없음: %s/%s' % (job, name))
         opts = {'from': [job, name]}
     opts.update({k: v for k, v in (b.get('options') or {}).items() if v not in ('', None)})
     return submit(s, {'type': 'video.upscale', 'inputs': {'video': send_to_node(src)[0]}, 'options': opts})
@@ -1368,7 +1435,7 @@ def adopt(s, b):
     d = code_dir(s, code)
     jd = find_job_dir(s, job) or ''
     if not os.path.isfile(os.path.join(jd, name)):
-        raise Bad('결과가 아직 맥에 없음: %s/%s' % (job, name))
+        raise Bad('결과가 아직 저장 위치에 없음: %s/%s' % (job, name))
     pick = {name: kind}
     if os.path.isfile(os.path.join(jd, 'sheet.png')):
         pick = {n: (kind if n == 'sheet.png' else n[:-4]) for n in os.listdir(jd)
@@ -1434,9 +1501,7 @@ def records(s, q='', project=None, limit=300, every=False):
     if not storage_ok(s):
         return []
     since = 0 if every else time.time() - float(s.get('record_days') or 30) * 86400
-    roots = [os.path.join(s['storage'], 'projects', p, 'jobs') for p in ([project] if project else projects(s))]
-    if not project:
-        roots.append(os.path.join(s['storage'], JOBS))
+    roots = [os.path.join(s['storage'], 'projects', p, WORK, 'jobs') for p in ([project] if project else projects(s))]
     out, q = [], q.strip().lower()
     for r in roots:
         for jid in os.listdir(r) if os.path.isdir(r) else []:
@@ -1457,10 +1522,9 @@ def records(s, q='', project=None, limit=300, every=False):
 
 def find_sha(s, sha):
     """A file the Mac holds under this sha: an uploaded original, or a job result listed in a job.json."""
-    d = os.path.join(s['storage'], 'assets')
-    for n in os.listdir(d) if os.path.isdir(d) else []:
-        if n.split('.')[0] == sha:
-            return os.path.join(d, n)
+    hit = asset_by_sha(s, sha)
+    if hit:
+        return hit
     for r in records(s, limit=100000, every=True):
         for f in r['files']:
             if f.get('sha') == sha:
@@ -1481,7 +1545,7 @@ def rerun(s, b):
         if srv('HEAD', '/assets/' + sha)[0] != 200:
             src = find_sha(s, sha)
             if not src:
-                raise Bad('입력이 노드에도 맥에도 없음: %s' % name)
+                raise Bad('입력이 노드에도 저장 위치에도 없음: %s' % name)
             send_to_node(src)
     return submit(s, {'type': j['type'], 'inputs': j.get('inputs') or {}, 'options': j.get('opts') or {}})
 
@@ -1524,13 +1588,12 @@ class H(BaseHTTPRequestHandler):
                 return self.reply(200, f.read(), (mimetypes.guess_type(path)[0] or 'text/plain') + '; charset=utf-8')
         if p == '/api/status':
             s = settings()
-            return self.reply(200, dict(status, settings=s, storage_ok=storage_ok(s), projects=projects(s)))
+            return self.reply(200, dict(status, settings=s, storage_ok=storage_ok(s), projects=projects(s), fixed=sorted(FIXED),
+                                        storage_label=STORAGE_LABEL or s['storage'], default_project=default_project(s)))
         if p == '/api/asset':   # where an uploaded original is kept (by sha) → its path under the storage location
             s, sha = settings(), (parse_qs(urlparse(self.path).query).get('sha') or [''])[0]
-            d = os.path.join(s['storage'], 'assets')
-            hit = next((n for n in (os.listdir(d) if storage_ok(s) and os.path.isdir(d) else [])
-                        if re.fullmatch(r'[0-9a-f]{64}', sha) and n.split('.')[0] == sha), None)
-            return self.reply(200, {'rel': 'assets/' + hit if hit else None})
+            hit = asset_by_sha(s, sha)
+            return self.reply(200, {'rel': UPLOADS + '/' + os.path.basename(hit) if hit else None})
         if p == '/api/records':
             q = parse_qs(urlparse(self.path).query)
             return self.reply(200, records(settings(), (q.get('q') or [''])[0], (q.get('project') or [None])[0]))
@@ -1621,11 +1684,11 @@ class H(BaseHTTPRequestHandler):
         if p == '/api/settings':
             s = settings()
             for k, v in json.loads(self.read_body()).items():
-                if k in DEFAULTS and type(v) is type(DEFAULTS[k]):
+                if k in DEFAULTS and k not in FIXED and type(v) is type(DEFAULTS[k]):
                     s[k] = v.strip() if isinstance(v, str) else v
             if s['project'] and s['project'] not in projects(s):
                 s['project'] = ''
-            write_json(SETTINGS, s)
+            write_json(SETTINGS, {k: v for k, v in s.items() if k not in FIXED})
             return self.reply(200, dict(s, storage_ok=storage_ok(s), projects=projects(s)))
         if p == '/api/assets':
             return self.asset()
@@ -1646,7 +1709,7 @@ class H(BaseHTTPRequestHandler):
                     return self.reply(200, {'saved': finish_character(s, b, p == '/api/register')})
                 if p == '/api/projects':
                     s['project'] = new_project(s, b.get('name'))
-                    write_json(SETTINGS, s)
+                    write_json(SETTINGS, {k: v for k, v in s.items() if k not in FIXED})
                     return self.reply(200, {'project': s['project'], 'projects': projects(s)})
                 if p == '/api/retry':
                     return self.reply(*retry(s, b))
@@ -1723,15 +1786,14 @@ class H(BaseHTTPRequestHandler):
             self.reply(502, {'error': 'server unreachable: %s' % e})
 
     def asset(self):
-        """Keep the uploaded file as the original in the storage location and send it only if the node lacks it. → {sha}"""
+        """Keep the uploaded file as the original in the storage location and send it only if the node lacks it. → {sha, rel}"""
         s = settings()
         if not storage_ok(s):
             self.read_body()
             return self.reply(409, {'error': '저장 위치 없음'})
-        d = os.path.join(s['storage'], 'assets')
+        d = os.path.join(s['storage'], UPLOADS)
         if not os.path.isdir(d):
             os.mkdir(d)
-        ext = os.path.splitext(unquote(self.headers.get('X-Name', '')))[1].lower()[:10]
         tmp, h, left = os.path.join(d, '.upload-%d.part' % threading.get_ident()), hashlib.sha256(), \
             int(self.headers['Content-Length'])
         with open(tmp, 'wb') as f:
@@ -1741,18 +1803,28 @@ class H(BaseHTTPRequestHandler):
                 f.write(b)
                 left -= len(b)
         sha = h.hexdigest()
-        dest = os.path.join(d, sha + ext)
-        os.replace(tmp, dest)
+        dest = keep_asset(tmp, unquote(self.headers.get('X-Name', '')), sha)
         try:
             sent = send_to_node(dest)[1]
         except Exception as e:
             return self.reply(502, {'error': 'upload to server failed: %s' % e})
-        self.reply(200, {'sha': sha, 'sent': sent, 'saved': dest})
+        self.reply(200, {'sha': sha, 'sent': sent, 'saved': dest, 'rel': UPLOADS + '/' + os.path.basename(dest)})
+
+
+class PoolServer(ThreadingHTTPServer):
+    """Requests run on long-lived pool threads, not a new thread each. The Linux NFS client drops its cached access
+    checks for a thread started after they were made, so with an NFS storage folder a fresh thread per request re-checks
+    every file it touches (records list, 259 jobs over Wi-Fi: 3.3 s instead of 0.02 s, session #20)."""
+    pool = ThreadPoolExecutor(32)
+
+    def process_request(self, request, client_address):
+        self.pool.submit(self.process_request_thread, request, client_address)
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))   # docker stop: PID 1 ignores SIGTERM without a handler
     threading.Thread(target=sync_loop, daemon=True).start()
-    srv_ = ThreadingHTTPServer(('127.0.0.1', PORT), H)
+    srv_ = PoolServer((HOST, PORT), H)
     srv_.daemon_threads = True
-    print('shutter-mac http://localhost:%d  settings=%s' % (PORT, SETTINGS), flush=True)
+    print('shutter UI http://%s:%d  settings=%s  storage=%s' % (HOST, PORT, SETTINGS, settings()['storage']), flush=True)
     srv_.serve_forever()

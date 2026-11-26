@@ -1,7 +1,7 @@
 // 영상 생성 › 워크플로 시퀀스 (design §11): common settings left (인물 · 방향 · 모델 · 길이 · 후보 · 마무리), the cuts
 // right — each row a cut (프롬프트, 첫 프레임, 상태), a row opens in the 한 컷 screen. Changing a common setting makes
 // the finished cuts "옛 설정 기준". 이어 보기 plays the cut results in order; 내보내기 joins them (video.concat) into the
-// project library. The sequence lives in projects/<p>/sequences/<id>.json, its cuts in cuts/<id>.json.
+// project library. The sequence lives in projects/<p>/work/sequences/<id>.json, its cuts in work/cuts/<id>.json.
 import { S, t, html, icon, api, srv, act, toast, poll, filesUrl, jobFileUrl, fmtDur, codeLabel, codeLabelOf, isStopped, failWord, fetchJobs } from '../app.js';
 import { MODELS } from '../models.js';
 import { sideMenu, VIDEO_MENU } from './wip.js';
@@ -526,7 +526,7 @@ export default {
     el.addEventListener('input', onInput);
     el.addEventListener('change', onChange);
     chars = ((await act(() => api('/api/library?scope=shared'))) || {}).characters || [];
-    scenes = (((await act(() => api('/api/library?scope=project'))) || {}).items || []).filter((i) => i.kind === 'scenes');
+    scenes = (((await act(() => api('/api/library?scope=project'))) || {}).items || []).filter((i) => i.kind === 'images');
     const id = query.get('id') || (sq && sq.id) || null;
     await load(id);
     if (id && !sq.id) history.replaceState(null, '', '#/video/seq');

@@ -39,6 +39,8 @@ COPY engine/tokenizers engine/tokenizers
 COPY engine/fonts /opt/shutter/fonts
 COPY server server
 COPY worker worker
+COPY mac/mac.py mac/script.py mac/
+COPY mac/ui mac/ui
 COPY docker/entrypoint.sh docker/fetch_models.py docker/weights.lock.json ./
 ENV PYTHONPATH=/opt/shutter/engine/py PYTHONDONTWRITEBYTECODE=1 SHUTTER_WORK=/work SHUTTER_MODELS=/models
 LABEL project=shutter

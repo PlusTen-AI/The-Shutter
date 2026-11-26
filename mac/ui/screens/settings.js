@@ -19,26 +19,33 @@ function general(s) {
       <p class="sub" style="margin: 0">${t('set.recordNote')}</p></form></div>`;
 }
 
+const fixed = (k) => ((S.status || {}).fixed || []).includes(k);   // set on the node (shutter.conf), read-only here
+
 function storage(s) {
   const st = S.status || {};
   const p = s.project || t('set.projectName');
+  const where = fixed('storage') ? st.storage_label : s.storage;
+  const dot = html`<span class="row lbl" style="gap: 6px"><span class="dot ${st.storage_ok ? 'ok' : 'bad'}"></span>${st.storage_ok ? t('set.connected') : t('set.missing')}</span>`;
   return html`<form class="col" data-form="storage" style="gap: 18px">
+    ${fixed('storage') ? html`<div class="field">${t('set.storage')}
+      <div class="row" style="gap: 8px"><span class="mono" style="flex: 1 1 320px">${where}</span>${dot}</div></div>` : html`
     <label class="field">${t('set.storage')}
-      <div class="row" style="gap: 8px"><input class="in mono" name="storage" value="${s.storage}" style="flex: 1 1 320px; width: auto">
-        <span class="row lbl" style="gap: 6px"><span class="dot ${st.storage_ok ? 'ok' : 'bad'}"></span>${st.storage_ok ? t('set.connected') : t('set.missing')}</span></div></label>
-    <div class="row"><button class="btn p">${t('common.apply')}</button></div>
+      <div class="row" style="gap: 8px"><input class="in mono" name="storage" value="${s.storage}" style="flex: 1 1 320px; width: auto">${dot}</div></label>
+    <div class="row"><button class="btn p">${t('common.apply')}</button></div>`}
     <div class="card col" style="gap: 6px">
       <h3 class="h3">${t('set.tree')}</h3>
-      <pre class="mono sub" style="margin: 0; line-height: 1.8">${s.storage || '…'}/
+      <pre class="mono sub" style="margin: 0; line-height: 1.8">${where || '…'}/
   characters/    ${t('set.treeChars')}
   locations/     ${t('set.treeLocs')}
-  assets/        ${t('set.treeAssets')}
+  props/         ${t('set.treeProps')}
+  uploads/       ${t('set.treeUploads')}
   projects/
     ${p}/
-      jobs/      ${t('set.treeJobs')}
-      scenes/    ${t('set.treeScenes')}
-      videos/    ${t('set.treeVideos')}</pre></div>
-    <p class="sub" style="margin: 0">${t('set.storageNote')}</p></form>
+      images/    ${t('set.treeImages')}
+      videos/    ${t('set.treeVideos')}
+      script/    ${t('set.treeScript')}
+      work/      ${t('set.treeWork')}</pre></div>
+    <p class="sub" style="margin: 0">${fixed('storage') ? t('set.storageFixed') + ' · ' : ''}${t('set.storageNote')}</p></form>
 `;
 }
 
@@ -54,9 +61,9 @@ function nodeList() {
 function nodesSec(s) {
   return html`<div class="col" style="gap: 18px">
     <div data-nodes>${nodeList()}</div>
-    <form class="row" data-form="server" style="gap: 12px; align-items: flex-end">
+    ${fixed('server') ? '' : html`<form class="row" data-form="server" style="gap: 12px; align-items: flex-end">
       <label class="field" style="flex: 0 1 360px">${t('set.server')}<input class="in mono" name="server" value="${s.server}"></label>
-      <button class="btn p">${t('common.apply')}</button></form>
+      <button class="btn p">${t('common.apply')}</button></form>`}
     ${cfg ? html`<form class="col" data-form="cache" style="gap: 12px">
       <div class="row" style="gap: 16px; align-items: flex-end">
         <label class="field">${t('set.cacheDays')}<input class="in mono" name="cache_days" inputmode="numeric" value="${cfg.cache_days}" style="width: 120px"></label>

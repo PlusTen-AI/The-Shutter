@@ -13,6 +13,22 @@ PORT=8300
 # Data (queue, input cache, results) and the shared models folder (ComfyUI folder layout) on every node.
 DATA=studio/shutter
 MODELS=studio/models
+# The UI runs on the main node: open http://<UI_ADDR>:<UI_PORT> in any browser on your network (UI_ADDR: the main
+# node's address as your computer sees it; empty = the host part of its HOST_ line).
+UI_ADDR=192.168.1.10
+UI_PORT=8310
+# Where your work is kept (characters, locations, uploads, projects with their results). The UI mounts it.
+#   empty           the main node's folder ~/studio/works (kept apart from DATA)
+#   //host/share    a folder shared from your computer over SMB (macOS: System Settings › General › Sharing › File
+#                   Sharing; Windows: the folder's Properties › Sharing). STORAGE_USER / STORAGE_PASS = an account on
+#                   that computer (no comma in the password; it is kept in the main node's docker volume settings).
+#                   While the share cannot be reached the UI shows a red dot and results wait on the main node.
+#   host:/path      a folder exported from your computer over NFS — no password, the export allows only the main node
+#                   (macOS: "/Users/me/shutter-work -mapall=me <main node address>" in /etc/exports, then sudo nfsd enable)
+#   /path or path   another folder on the main node (e.g. an external disk), relative paths from the node user's home
+STORAGE=
+STORAGE_USER=
+STORAGE_PASS=
 # Release builds (./deploy.sh build <tag>) clone this repository at <tag>.
 REPO=https://github.com/OWNER/shutter.git
 # Image tag that start.sh / deploy.sh up run (deploy.sh build <tag> makes it; dev = a development build).

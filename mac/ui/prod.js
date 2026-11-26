@@ -70,7 +70,7 @@ export async function submitFrame(sq, f) {
 export async function pickFrame(sq, f, job, name) {
   const r = await api('/api/save', { job, name, title: `S${String(sq.script.scene).padStart(2, '0')}_${f.id}` });
   f.base = { job, name };
-  f.rel = `projects/${project()}/scenes/${r.saved}`;
+  f.rel = `projects/${project()}/images/${r.saved}`;
   f.key = (f.jobs.find((x) => x.job === job) || {}).key || specKey(f);
   if (f.spec.type === 'plate') {
     const m = await api('/api/meta?job=' + job);
